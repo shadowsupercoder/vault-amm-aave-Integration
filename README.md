@@ -3,7 +3,6 @@
 ## 📄 Project Overview
 This project implements a **Vault Smart Contract** that allows users to deposit tokens, receive shares representing their stake, and withdraw their assets. The vault owner manages strategies, including **Automated Market Makers (AMMs)** like Uniswap/Sushiswap and **Aave** integration for lending/borrowing. The owner is also responsible for rebalancing, token swaps, and strategy adjustments.
 
----
 ## 🛠️ Tech Stack
 - **Solidity**: Smart contract development.
 - **Foundry**: Development environment and testing framework.
@@ -11,7 +10,6 @@ This project implements a **Vault Smart Contract** that allows users to deposit 
 - **Aave Protocol**: For lending and borrowing.
 - **Uniswap/Sushiswap**: AMM integration for token swaps.
 
----
 ## 📋 Features & Requirements
 
 ### Vault Core Functions
@@ -34,10 +32,7 @@ This project implements a **Vault Smart Contract** that allows users to deposit 
   - Only the vault owner can perform rebalancing, strategy switching, and token swaps.
   - Allows for dynamic adjustments based on market conditions.
 
----
-
 ## 🚀 Getting Started
-
 ### 📦 Installation
 
 ```bash
@@ -56,8 +51,6 @@ todo
 ```bash
 todo
 ```
-
----
 
 ## 📄 Usage
 
@@ -84,8 +77,6 @@ vault.swapTokens(tokenA, tokenB);
 vault.lendOnAave(amount);
 vault.borrowFromAave(amount);
 ```
-
----
 
 ## 📂 Project Structure
 ```
