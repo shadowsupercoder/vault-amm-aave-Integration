@@ -1,66 +1,106 @@
-## Foundry
+# 🚀 Vault Smart Contract AMM Integration
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+## 📄 Project Overview
+This project implements a **Vault Smart Contract** that allows users to deposit tokens, receive shares representing their stake, and withdraw their assets. The vault owner manages strategies, including **Automated Market Makers (AMMs)** like Uniswap/Sushiswap and **Aave** integration for lending/borrowing. The owner is also responsible for rebalancing, token swaps, and strategy adjustments.
 
-Foundry consists of:
+---
+## 🛠️ Tech Stack
+- **Solidity**: Smart contract development.
+- **Foundry**: Development environment and testing framework.
+- **Chainlink**: Oracles for reliable price feeds.
+- **Aave Protocol**: For lending and borrowing.
+- **Uniswap/Sushiswap**: AMM integration for token swaps.
 
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+---
+## 📋 Features & Requirements
 
-## Documentation
+### Vault Core Functions
+- **Deposit/Withdraw**:
+  - Users can deposit tokens into the vault to receive shares.
+  - Users can withdraw their tokens based on the current value of their shares.
+- **Share Calculation**:
+  - Shares represent a user's ownership of the total assets in the vault.
 
-https://book.getfoundry.sh/
+### AMM Integration (Uniswap/Sushiswap)
+- The **owner** can swap tokens on AMMs to optimize returns.
+- Manage **slippage** and **price impact** during token swaps.
 
-## Usage
+### Aave Integration
+- The **owner** can lend or borrow assets on Aave.
+- Maintain a healthy **collateral ratio** to leverage strategies.
 
-### Build
+### Owner-Controlled Actions
+- **Rebalancing & Strategy Switching**:
+  - Only the vault owner can perform rebalancing, strategy switching, and token swaps.
+  - Allows for dynamic adjustments based on market conditions.
 
-```shell
-$ forge build
+---
+
+## 🚀 Getting Started
+
+### 📦 Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/shadowsupercoder/vault-aave-Integration.git
+
+# Navigate to the project directory
+cd vault-aave-Integration
+
+# Install dependencies
+todo
 ```
 
-### Test
+### 🧪 Running Tests
 
-```shell
-$ forge test
+```bash
+todo
 ```
 
-### Format
+---
 
-```shell
-$ forge fmt
+## 📄 Usage
+
+### 📥 Deposit Tokens
+Users can deposit tokens into the vault and receive shares representing their stake.
+
+```solidity
+vault.deposit(amount);
 ```
 
-### Gas Snapshots
+### 📤 Withdraw Tokens
+Users can withdraw their tokens based on the value of their shares.
 
-```shell
-$ forge snapshot
+```solidity
+vault.withdraw(shares);
 ```
 
-### Anvil
+### 🔄 Rebalancing & Strategy Management
+The vault owner can manage strategies, rebalance assets, and perform token swaps.
 
-```shell
-$ anvil
+```solidity
+vault.rebalance();
+vault.swapTokens(tokenA, tokenB);
+vault.lendOnAave(amount);
+vault.borrowFromAave(amount);
 ```
 
-### Deploy
+---
 
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
+## 📂 Project Structure
 ```
-
-### Cast
-
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
+.
+├── src
+│   ├── Vault.sol            # Core vault contract
+│   ├── AaveIntegration.sol  # Aave integration
+│   ├── AMMIntegration.sol   # Uniswap/Sushiswap integration
+├── test
+│   ├── Vault.t.sol          # Test suite for vault functionality
+│   ├── AMMIntegration.t.sol
+│   └── AaveIntegration.t.sol
+├── script
+│   └── Deploy.s.sol            # Deployment script
+├── README.md
+├── foundry.toml
+└── package.json
 ```
