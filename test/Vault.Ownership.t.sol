@@ -51,13 +51,11 @@ contract VaultOwnershipTest is Test {
         vm.startPrank(user1);
         vm.expectRevert(
             abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector,
-                address(user1),
-                vault.DEFAULT_ADMIN_ROLE()
+                IAccessControl.AccessControlUnauthorizedAccount.selector, address(user1), vault.DEFAULT_ADMIN_ROLE()
             )
         );
         vault.emergencyWithdraw();
-       vm.stopPrank();
+        vm.stopPrank();
 
         // Admin calls emergencyWithdraw successfully
         vm.prank(admin);
@@ -79,7 +77,7 @@ contract VaultOwnershipTest is Test {
     //             bytes32(0)
     //         )
     //     );
-     
+
     //     vault.grantRole(vault.ADMIN_ROLE(), user2);
 
     //     // Non-admin (user1) tries to revoke ADMIN_ROLE from admin
@@ -107,9 +105,8 @@ contract VaultOwnershipTest is Test {
     //             bytes32(0)
     //         )
     //     );
-       
-    //     vault.grantRole(vault.DEFAULT_ADMIN_ROLE(), user1);
 
+    //     vault.grantRole(vault.DEFAULT_ADMIN_ROLE(), user1);
 
     //     // Ensure user1 still doesn't have the role
     //     assertFalse(vault.hasRole(vault.DEFAULT_ADMIN_ROLE(), user1));

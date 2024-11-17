@@ -191,10 +191,7 @@ contract VaultDepositWithdrawTest is Test {
         // Expect a revert with the custom error
         vm.expectRevert(
             abi.encodeWithSelector(
-                IERC20Errors.ERC20InsufficientAllowance.selector,
-                address(vault),
-                50 ether,
-                depositAmount
+                IERC20Errors.ERC20InsufficientAllowance.selector, address(vault), 50 ether, depositAmount
             )
         );
         vault.deposit(depositAmount);
@@ -213,6 +210,7 @@ contract VaultDepositWithdrawTest is Test {
         vault.withdraw(userShares + 1); // Attempt to withdraw more than available shares
         vm.stopPrank();
     }
+
     function testDepositAfterWithdraw() public {
         vm.startPrank(user1);
         uint256 depositAmount1 = 100 ether;
@@ -231,6 +229,7 @@ contract VaultDepositWithdrawTest is Test {
         assertEq(vault.balanceOf(user1), depositAmount2);
         vm.stopPrank();
     }
+
     function testWithdrawAfterFullSupplyBurned() public {
         vm.startPrank(user1);
         uint256 depositAmount = 100 ether;
@@ -250,6 +249,7 @@ contract VaultDepositWithdrawTest is Test {
 
         vm.stopPrank();
     }
+
     function testMultipleDepositsAndWithdrawals() public {
         vm.startPrank(user1);
         uint256 depositAmount1 = 100 ether;

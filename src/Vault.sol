@@ -71,8 +71,7 @@ contract Vault is AccessControlUpgradeable {
         require(_shares > 0, "Invalid share amount");
         require(balanceOf[msg.sender] >= _shares, "Insufficient shares");
 
-        uint256 amount = (_shares * token.balanceOf(address(this))) /
-            totalSupply;
+        uint256 amount = (_shares * token.balanceOf(address(this))) / totalSupply;
         _burn(msg.sender, _shares);
         token.transfer(msg.sender, amount);
     }
