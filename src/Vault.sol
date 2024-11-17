@@ -1,46 +1,83 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
-import {ERC20, SafeERC20} from "openzeppelin-contracts/token/ERC20/utils/SafeERC20.sol";
-import {Ownable} from "openzeppelin-contracts/access/Ownable.sol";
-import {ReentrancyGuard} from "openzeppelin-contracts/security/ReentrancyGuard.sol";
-import {IERC20} from "openzeppelin-contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import "forge-std/console.sol";
 
-contract Vault is ReentrancyGuard, Ownable {
-    using SafeERC20 for IERC20;
-
+contract Vault is AccessControlUpgradeable {
     IERC20 public immutable token;
-    uint256 public totalShares;
-    mapping(address => uint256) public shares;
 
-    event Deposited(address indexed user, uint256 amount, uint256 shares);
-    event Withdrawn(address indexed user, uint256 amount, uint256 shares);
+    uint256 public totalSupply; // Total Supply of shares
+    mapping(address => uint256) public balanceOf;
 
-    constructor(IERC20 _token) {
-        token = _token;
+    constructor(address _token) {
+        token = IERC20(_token);
     }
 
-    function deposit(uint256 amount) external nonReentrant {
-        require(amount > 0, "Invalid amount");
-
-        uint256 newShares = totalShares == 0 ? amount : (amount * totalShares) / token.balanceOf(address(this));
-        shares[msg.sender] += newShares;
-        totalShares += newShares;
-
-        emit Deposited(msg.sender, amount, newShares);
-
-        token.safeTransferFrom(msg.sender, address(this), amount);
+    function initialize(address _admin) external initializer {
+        __AccessControl_init();
+        require(_admin != address(0), "Vault: Admin can not be zero address");
+        // Grant the `DEFAULT_ADMIN_ROLE` and `ADMIN_ROLE` to the deployer
+        _grantRole(DEFAULT_ADMIN_ROLE, _admin);
     }
 
-    function withdraw(uint256 shareAmount) external nonReentrant {
-        require(shareAmount > 0 && shareAmount <= shares[msg.sender], "Invalid share amount");
+    function _mint(address _to, uint256 _shares) private {
+        totalSupply += _shares;
+        balanceOf[_to] += _shares;
+    }
 
-        uint256 amount = (shareAmount * token.balanceOf(address(this))) / totalShares;
-        shares[msg.sender] -= shareAmount;
-        totalShares -= shareAmount;
+    function _burn(address _from, uint256 _shares) private {
+        totalSupply -= _shares;
+        balanceOf[_from] -= _shares;
+    }
 
-        emit Withdrawn(msg.sender, amount, shareAmount);
+    function deposit(uint256 _amount) external {
+        /*
+        a = amount
+        B = balance of token before deposit
+        T = total supply
+        s = shares to mint
 
-        token.safeTransfer(msg.sender, amount);
+        (s + T) / T = (a + B) / B 
+
+        s = aT / B
+        */
+        require(_amount > 0, "Invalid amount"); // Add this line to prevent zero deposits
+
+        uint256 shares;
+        if (totalSupply == 0) {
+            shares = _amount;
+        } else {
+            shares = (_amount * totalSupply) / token.balanceOf(address(this));
+        }
+
+        token.transferFrom(msg.sender, address(this), _amount);
+        _mint(msg.sender, shares);
+    }
+
+    function withdraw(uint256 _shares) external {
+        /*
+        a = amount
+        B = balance of token before withdraw
+        T = total supply
+        s = shares to burn
+
+        (T - s) / T = (B - a) / B 
+
+        a = sB / T
+        */
+
+        require(_shares > 0, "Invalid share amount");
+        require(balanceOf[msg.sender] >= _shares, "Insufficient shares");
+
+        uint256 amount = (_shares * token.balanceOf(address(this))) /
+            totalSupply;
+        _burn(msg.sender, _shares);
+        token.transfer(msg.sender, amount);
+    }
+
+    function emergencyWithdraw() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 contractBalance = token.balanceOf(address(this));
     }
 }
