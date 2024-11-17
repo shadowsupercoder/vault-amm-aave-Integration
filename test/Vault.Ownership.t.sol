@@ -51,10 +51,12 @@ contract VaultOwnershipTest is Test {
         vm.startPrank(user1);
         vm.expectRevert(
             abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector, address(user1), vault.DEFAULT_ADMIN_ROLE()
+                IAccessControl.AccessControlUnauthorizedAccount.selector,
+                address(user1),
+                vault.DEFAULT_ADMIN_ROLE()
             )
         );
-        vault.emergencyWithdraw();
+        vault.swapTokens(0, 0, [], 0);
         vm.stopPrank();
 
         // Admin calls emergencyWithdraw successfully
