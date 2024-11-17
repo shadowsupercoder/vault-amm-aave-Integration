@@ -43,13 +43,16 @@ git clone https://github.com/shadowsupercoder/vault-aave-Integration.git
 cd vault-aave-Integration
 
 # Install dependencies
-todo
+forge install foundry-rs/forge-std
+forge install OpenZeppelin/openzeppelin-foundry-upgrades
+forge install OpenZeppelin/openzeppelin-contracts-upgradeable
+
 ```
 
 ### 🧪 Running Tests
 
 ```bash
-todo
+forge test
 ```
 
 ## 📄 Usage
