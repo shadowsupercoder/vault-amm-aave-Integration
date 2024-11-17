@@ -46,7 +46,9 @@ cd vault-aave-Integration
 forge install foundry-rs/forge-std
 forge install OpenZeppelin/openzeppelin-foundry-upgrades
 forge install OpenZeppelin/openzeppelin-contracts-upgradeable
-
+forge install smartcontractkit/chainlink
+forge install Uniswap/v2-periphery
+forge install Uniswap/v2-core
 ```
 
 ### 🧪 Running Tests
