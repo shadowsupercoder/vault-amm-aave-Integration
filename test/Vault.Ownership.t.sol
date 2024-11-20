@@ -17,6 +17,10 @@ contract VaultOwnershipTest is Test {
     address user2 = address(0x3);
     uint256 initialSlippage = 50;
 
+    // Uniswap V2Factory Address
+    //https://docs.uniswap.org/contracts/v2/reference/smart-contracts/router-02
+    address constant ROUTERV2 = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
+
     IUniswapV2Router02 public router;
     MockAggregatorV3 public mockPriceFeed;
 
@@ -24,11 +28,10 @@ contract VaultOwnershipTest is Test {
         // Deploy the mock ERC20 token
         token = new MockERC20();
         mockPriceFeed = new MockAggregatorV3();
-        router = IUniswapV2Router02(deployCode("UniswapV2Router02.sol"));
 
         // Deploy and initialize the vault contract with the admin
         vm.startPrank(admin);
-        vault = new Vault(address(token), address(router), address(mockPriceFeed));
+        vault = new Vault(address(token), address(ROUTERV2), address(mockPriceFeed));
         vault.initialize(admin, initialSlippage);
         vm.stopPrank();
     }

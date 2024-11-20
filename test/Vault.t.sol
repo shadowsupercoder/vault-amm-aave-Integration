@@ -18,6 +18,10 @@ contract VaultDepositWithdrawTest is Test {
     address owner = address(0x123);
     address user1 = address(0x456);
     address user2 = address(0x789);
+    
+    // Uniswap V2Factory Address
+    //https://docs.uniswap.org/contracts/v2/reference/smart-contracts/router-02
+    address constant ROUTERV2 = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
 
     IUniswapV2Router02 public router;
     MockAggregatorV3 public mockPriceFeed;
@@ -26,7 +30,7 @@ contract VaultDepositWithdrawTest is Test {
         // Deploy the mock token
         token = new MockERC20();
         mockPriceFeed = new MockAggregatorV3();
-        router = IUniswapV2Router02(deployCode("UniswapV2Router02.sol"));
+        router = IUniswapV2Router02(address(ROUTERV2));
         token.initialize("MockToken", "MTK");
 
         // Deploy the vault contract with the mock token
