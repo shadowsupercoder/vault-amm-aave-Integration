@@ -122,7 +122,7 @@ contract Vault is AccessControlUpgradeable {
      * @return Minimum output amount after accounting for slippage.
      */
     function calculateAmountOutMinChainLink(uint256 amountIn, uint256 currentPrice) public view returns (uint256) {
-        uint256 usedPrice = (currentPrice > 0) ? currentPrice : uint256(getChainlinkDataFeedLatestAnswer());
+        uint256 usedPrice = (currentPrice > 0) ? currentPrice : uint256(getValidatedPrice());
         uint256 amountOut = (amountIn * usedPrice) / 1e18;
         uint256 slippageAmount = (amountOut * maxSlippage) / 10_000; // Slippage in basis points
         return amountOut - slippageAmount;
@@ -287,4 +287,17 @@ contract Vault is AccessControlUpgradeable {
             token.transfer(msg.sender, aaveBalance);
         }
     }
+
+    function isPriceValid(int256 price) internal view returns (bool) {
+    require(price > 0, "Vault: Invalid price");
+    (, , uint256 startedAt, uint256 updatedAt, ) = dataFeed.latestRoundData();
+    require(updatedAt >= startedAt, "Vault: Price feed stale");
+    return true;
+}
+
+function getValidatedPrice() public view returns (int256) {
+    int256 price = getChainlinkDataFeedLatestAnswer();
+    require(isPriceValid(price), "Vault: Invalid Chainlink price");
+    return price;
+}
 }
