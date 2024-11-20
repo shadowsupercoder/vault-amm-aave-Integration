@@ -3,107 +3,128 @@ pragma solidity ^0.8.18;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "uniswap/v2-periphery/interfaces/IUniswapV2Router02.sol";
-import "./IStrategy.sol";
+import "uniswap/v2-core/interfaces/IUniswapV2Pair.sol";
+
+import "./interfaces/IStrategy.sol";
 import "@chainlink/v0.8/interfaces/AggregatorV3Interface.sol";
 
-contract StatelessUniswapStrategy is IStrategy {
+contract UniswapStrategy is IStrategy {
     IUniswapV2Router02 public immutable uniswapRouter;
     AggregatorV3Interface internal immutable dataFeed;
+    // Target percentage allocation for tokenIn (e.g., 60 means 60% for tokenIn and 40% for tokenOut)
+    uint256 public targetInPercent = 50; // Default to 50% for a balanced portfolio
+    address public immutable tokenIn;
+    address public immutable tokenOut;
+    address[] public swapPath;
 
-    constructor(address _uniswapRouter, address _dataFeed) {
+    uint256 public maxSlippage; // Maximum allowed slippage in basis points (1% = 100, 0.5% = 50)
+
+    constructor(address _uniswapRouter, address _dataFeed, address _pair, uint256 _initialSlippage) {
         require(_uniswapRouter != address(0), "Invalid Uniswap Router");
         require(
             _dataFeed != address(0),
             "Vault: DataFeed address cannot be zero"
         );
+        require(_pair != address(0), "Invalid pair address");
 
         uniswapRouter = IUniswapV2Router02(_uniswapRouter);
         dataFeed = AggregatorV3Interface(_dataFeed);
+
+        // Derive the swap path from the pair
+        IUniswapV2Pair pair = IUniswapV2Pair(_pair);
+        tokenIn = pair.token0();
+        tokenOut = pair.token1();
+
+        // Set the path based on the pair tokens
+        swapPath = [tokenIn, tokenOut];
+        setMaxSlippage(_initialSlippage);
     }
 
-    /**
-     * @notice Executes a token swap on Uniswap.
-     * @param amountIn The amount of input tokens to swap.
-     * @param from The address transferring tokens (Vault).
-     * @param to The address receiving tokens (Vault).
-     * @param path The swap path (e.g., [tokenA, tokenB]).
-     * @param deadline The deadline for the transaction.
-     */
-    function execute(
-        uint256 amountIn,
-        uint256 maxSlippage,
-        address[] calldata path,
-        address to,
-        uint256 deadline
-    ) external override {
-        _validatePriceImpact(amountIn, path);
-        _swapTokens(amountIn, maxSlippage, path, to, deadline);
+    function execute(bytes calldata params) external override {
+        (uint256 amount, address to, ) = abi
+            .decode(params, (uint256, address, address));
+
+        _validatePriceImpact(amount);
+        _swapTokens(
+            amount,
+            to,
+            block.timestamp + 1 hours,
+            swapPath
+        );
     }
 
-    /**
-     * @notice Allows the admin to swap tokens on Uniswap.
-     * @param amountIn Amount of input tokens to swap.
-     * @param amountOutMin Minimum amount of output tokens required.
-     * @param path Array of token addresses representing the swap path.
-     * @param to Receiver.
-     * @param deadline Unix timestamp after which the swap will expire.
-     */
     function _swapTokens(
         uint256 amountIn,
-        uint256 maxSlippage,
-        address[] calldata path,
         address to,
-        uint256 deadline
+        uint256 deadline,
+        address[] memory path
     ) private {
-        require(path.length >= 2, "Invalid path");
-        require(amountIn > 0, "Vault: Invalid amount");
-        require(path[0] == address(token), "Vault: Invalid path");
+        require(amountIn > 0, "Invalid input amount");
+        require(to != address(0), "Invalid recipient address");
+        require(path.length >= 2, "Invalid swap path");
 
-        // Fetch the latest price from Chainlink to calculate the expected output
-        int256 latestPrice = getValidatedPrice(); // Uses Chainlink oracle for price validation
-        require(latestPrice > 0, "Vault: Invalid price feed");
-
-        // Calculate the minimum amountOut based on the oracle price
-        uint256 expectedAmountOut = calculateAmountOutMinChainLink(
+        // Calculate the minimum output amount based on slippage tolerance
+        uint256 expectedAmountOut = calculateAmountOutMin(
             amountIn,
-            uint256(latestPrice)
+            maxSlippage
         );
 
-        // Approve Uniswap Router to spend the tokens
-        IERC20(path[0]).approve(address(uniswapRouter), amountIn);
+        // Approve tokens for Uniswap router
+        _approveTokenIfNeeded(tokenIn, amountIn);
 
-        // Perform the swap on Uniswap
-        uint256[] memory amountsOut = uniswapRouter.swapExactTokensForTokens(
+        // Perform the token swap
+        uint256[] memory amounts = _executeSwap(
             amountIn,
-            expectedAmountOut, // Use calculated minimum output with slippage
+            expectedAmountOut,
             path,
             to,
             deadline
         );
 
-        // Ensure the swap result meets expectations
-        uint256 finalOutput = amountsOut[amountsOut.length - 1];
+        // Validate the swap output
         require(
-            finalOutput >= expectedAmountOut,
-            "Vault: Swap output below acceptable slippage"
+            amounts[amounts.length - 1] >= expectedAmountOut,
+            "Insufficient output amount"
         );
     }
 
-    /**
-     * @notice Calculates the minimum output amount with slippage protection.
-     * @param amountIn Amount of input tokens.
-     * @param currentPrice Current Chainlink price of the output token.
-     * @return Minimum output amount after accounting for slippage.
-     */
-    function calculateAmountOutMinChainLink(
+    function _approveTokenIfNeeded(address token, uint256 amount) private {
+        uint256 currentAllowance = IERC20(token).allowance(
+            address(this),
+            address(uniswapRouter)
+        );
+        if (currentAllowance < amount) {
+            IERC20(token).approve(address(uniswapRouter), amount);
+        }
+    }
+
+    function _executeSwap(
         uint256 amountIn,
-        uint256 currentPrice
+        uint256 amountOutMin,
+        address[] memory path,
+        address to,
+        uint256 deadline
+    ) private returns (uint256[] memory) {
+        return
+            uniswapRouter.swapExactTokensForTokens(
+                amountIn,
+                amountOutMin,
+                path,
+                to,
+                deadline
+            );
+    }
+
+    function calculateAmountOutMin(
+        uint256 amountIn,
+        uint256 _maxSlippage
     ) public view returns (uint256) {
-        uint256 usedPrice = (currentPrice > 0)
-            ? currentPrice
-            : uint256(getValidatedPrice());
-        uint256 amountOut = (amountIn * usedPrice) / 1e18;
-        uint256 slippageAmount = (amountOut * maxSlippage) / 10_000; // Slippage in basis points
+        // Fetch current price from Chainlink
+        uint256 price = uint256(getValidatedPrice());
+        uint256 amountOut = (amountIn * price) / 1e18;
+
+        // Apply slippage tolerance
+        uint256 slippageAmount = (amountOut * _maxSlippage) / 10_000;
         return amountOut - slippageAmount;
     }
 
@@ -121,62 +142,115 @@ contract StatelessUniswapStrategy is IStrategy {
         (
             ,
             /* uint80 roundID */
-            int256 answer /*uint startedAt*/,
+            int256 answer /*uint startedAt*/ /*uint timeStamp*/ /*uint80 answeredInRound*/,
             ,
             ,
 
-        ) = /*uint timeStamp*/
-            /*uint80 answeredInRound*/
-            dataFeed.latestRoundData();
+        ) = dataFeed.latestRoundData();
         return answer;
     }
 
     function _validatePriceImpact(
-        uint256 amountIn,
-        address[] calldata path
+        uint256 amountIn
     ) internal view {
         uint256[] memory amountsOut = uniswapRouter.getAmountsOut(
             amountIn,
-            path
+            swapPath
         );
-        uint256 initialPrice = amountsOut[0];
-        uint256 finalPrice = amountsOut[amountsOut.length - 1];
-
-        // Calculate price impact percentage
-        uint256 priceImpact = ((initialPrice - finalPrice) * 10_000) /
-            initialPrice; // Basis points (BPS)
-
-        require(priceImpact <= maxSlippage, "Vault: Price impact too high");
+        uint256 priceImpact = ((amountsOut[0] -
+            amountsOut[amountsOut.length - 1]) * 10_000) / amountsOut[0];
+        require(priceImpact <= maxSlippage, "Price impact too high");
     }
 
-    /**
-        The withdrawal of all tokens must be implemented in the Vault without performing
-        swaps to proactively prevent any potential issues with faulty swaps
-    */
-    function withdrawAll() external override returns (uint256) {
-        return 0;
-    }
-
-    /**
-     * @notice Validates the price retrieved from the Chainlink oracle.
-     * @param price The price value to validate.
-     * @return True if the price is valid, otherwise it reverts.
-     */
     function _isPriceValid(int256 price) internal view returns (bool) {
-        require(price > 0, "Vault: Invalid price"); // Ensure the price is positive and non-zero
-
-        // Retrieve timestamp data from the Chainlink oracle
+        require(price > 0, "Invalid price value");
         (, , uint256 startedAt, uint256 updatedAt, ) = dataFeed
             .latestRoundData();
-
-        // Ensure the price data is fresh and within an acceptable timeframe
-        uint256 currentTime = block.timestamp;
-        require(updatedAt >= startedAt, "Vault: Price feed data is stale");
-        require(
-            currentTime - updatedAt <= 1 hours,
-            "Vault: Price data is outdated"
-        );
-
+        require(updatedAt >= startedAt, "Stale price data");
+        require(block.timestamp - updatedAt <= 1 hours, "Price data outdated");
         return true;
+    }
+
+    /**
+     * @notice Withdraws all of the `tokenIn` balance from the contract.
+     * @return The total amount of `tokenIn` withdrawn.
+     */
+    function withdrawAll() external returns (uint256) {
+        uint256 balance = IERC20(tokenIn).balanceOf(address(this));
+        require(balance > 0, "No balance to withdraw");
+
+        // Transfer the entire balance of tokenIn to the owner
+        IERC20(tokenIn).transfer(msg.sender, balance);
+
+        return balance;
+    }
+
+    /**
+     * @notice Withdraws a specific amount of `tokenIn` from the contract.
+     * @param params Encoded parameters containing the withdrawal amount.
+     */
+    function withdraw(bytes calldata params) external {
+        // Decode the `params` to extract the withdrawal amount
+        (uint256 amount, , , ) = abi.decode(
+            params,
+            (uint256, uint256, address, address)
+        );
+        require(amount > 0, "Invalid withdrawal amount");
+
+        uint256 balance = IERC20(tokenIn).balanceOf(address(this));
+        require(balance >= amount, "Insufficient balance");
+
+        // Transfer the specified amount of tokenIn to the owner
+        IERC20(tokenIn).transfer(msg.sender, amount);
+    }
+
+    function getBalance() external view returns (uint256) {
+        return IERC20(tokenOut).balanceOf(address(this));
+    }
+
+    function rebalance() external {
+        // Define the automatic deadline (e.g., 15 minutes from now)
+        uint256 deadline = block.timestamp + 15 minutes;
+        // Get current balances of tokenIn and tokenOut
+        uint256 balanceIn = IERC20(tokenIn).balanceOf(address(this));
+        uint256 balanceOut = IERC20(tokenOut).balanceOf(address(this));
+        uint256 totalBalance = balanceIn + balanceOut;
+
+        // Calculate target balances
+        uint256 targetBalanceIn = (totalBalance * targetInPercent) / 100;
+        uint256 targetBalanceOut = totalBalance - targetBalanceIn;
+        address[] memory path = new address[](2);
+        // Perform rebalancing if necessary
+        if (balanceIn > targetBalanceIn) {
+            uint256 excessIn = balanceIn - targetBalanceIn;
+
+            // Define the forward swap path (tokenIn -> tokenOut)
+            path[0] = tokenIn;
+            path[1] = tokenOut;
+
+            _swapTokens(excessIn, address(this), deadline, path);
+        } else if (balanceOut > targetBalanceOut) {
+            uint256 excessOut = balanceOut - targetBalanceOut;
+
+            // Define the reverse swap path (tokenOut -> tokenIn)
+            path[0] = tokenOut;
+            path[1] = tokenIn;
+
+            _swapTokens(excessOut, address(this), deadline, path);
+        }
+    }
+
+    function setTargetInPercent(uint256 _targetInPercent) external {
+        require(_targetInPercent <= 100, "Invalid target percentage");
+        targetInPercent = _targetInPercent;
+    }
+
+    /**
+     * @notice Allows the admin to set the maximum slippage percentage.
+     * @param _slippage The maximum slippage percentage (e.g., 50 for 5%).
+     */
+    function setMaxSlippage(uint256 _slippage) public {
+        require(_slippage <= 100, "Slippage too high");
+        maxSlippage = _slippage;
     }
 }
