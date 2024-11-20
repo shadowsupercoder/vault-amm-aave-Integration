@@ -5,6 +5,10 @@ import "forge-std/Test.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import "../src/Vault.sol";
 import "../src/mock/MockERC20.sol";
+import "../src/mock/MockAggregatorV3.sol";
+
+import "uniswap/v2-periphery/interfaces/IUniswapV2Router02.sol";
+
 // import "forge-std/console.sol";
 
 contract VaultDepositWithdrawTest is Test {
@@ -15,14 +19,19 @@ contract VaultDepositWithdrawTest is Test {
     address user1 = address(0x456);
     address user2 = address(0x789);
 
+    IUniswapV2Router02 public router;
+    MockAggregatorV3 public mockPriceFeed;
+
     function setUp() public {
         // Deploy the mock token
         token = new MockERC20();
+        mockPriceFeed = new MockAggregatorV3();
+        router = IUniswapV2Router02(deployCode("UniswapV2Router02.sol"));
         token.initialize("MockToken", "MTK");
 
         // Deploy the vault contract with the mock token
         vm.prank(owner);
-        vault = new Vault(address(token));
+        vault = new Vault(address(token), address(router), address(mockPriceFeed));
 
         // Distribute some tokens to users
         token.mint(user1, 1000 ether);

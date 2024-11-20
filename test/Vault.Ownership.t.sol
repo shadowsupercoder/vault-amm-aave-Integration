@@ -4,23 +4,32 @@ pragma solidity ^0.8.18;
 import "forge-std/Test.sol";
 import "../src/Vault.sol";
 import "../src/mock/MockERC20.sol";
+import "../src/mock/MockAggregatorV3.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import "uniswap/v2-periphery/interfaces/IUniswapV2Router02.sol";
 
 contract VaultOwnershipTest is Test {
     Vault vault;
     MockERC20 token;
+
     address admin = address(0x1);
     address user1 = address(0x2);
     address user2 = address(0x3);
+    uint256 initialSlippage = 50;
+
+    IUniswapV2Router02 public router;
+    MockAggregatorV3 public mockPriceFeed;
 
     function setUp() public {
         // Deploy the mock ERC20 token
         token = new MockERC20();
+        mockPriceFeed = new MockAggregatorV3();
+        router = IUniswapV2Router02(deployCode("UniswapV2Router02.sol"));
 
         // Deploy and initialize the vault contract with the admin
         vm.startPrank(admin);
-        vault = new Vault(address(token));
-        vault.initialize(admin);
+        vault = new Vault(address(token), address(router), address(mockPriceFeed));
+        vault.initialize(admin, initialSlippage);
         vm.stopPrank();
     }
 
@@ -44,24 +53,26 @@ contract VaultOwnershipTest is Test {
     }
 
     /*
-       Ensure only the admin can call the emergencyWithdraw function.
+       Ensure only the admin can call the setMaxSlippage function.
     */
-    function testOnlyAdminCanCallEmergencyWithdraw() public {
-        // Non-admin tries to call emergencyWithdraw
+    function testOnlyAdminCanCallSetMaxSlippage() public {
+        // Non-admin tries to call setMaxSlippage
         vm.startPrank(user1);
         vm.expectRevert(
             abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector,
-                address(user1),
-                vault.DEFAULT_ADMIN_ROLE()
+                IAccessControl.AccessControlUnauthorizedAccount.selector, address(user1), vault.DEFAULT_ADMIN_ROLE()
             )
         );
-        vault.swapTokens(0, 0, [], 0);
+        address[] memory path;
+        vault.swapTokens(0, 0, path, user2, 0);
         vm.stopPrank();
 
-        // Admin calls emergencyWithdraw successfully
+        assertEq(vault.maxSlippage(), 50);
+
+        // Admin calls setMaxSlippage successfully
         vm.prank(admin);
-        vault.emergencyWithdraw();
+        vault.setMaxSlippage(70);
+        assertEq(vault.maxSlippage(), 70);
     }
 
     /*
