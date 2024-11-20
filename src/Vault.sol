@@ -5,6 +5,7 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "uniswap/v2-periphery/interfaces/IUniswapV2Router02.sol";
 import "@chainlink/v0.8/interfaces/AggregatorV3Interface.sol";
+import "@aave/protocol-v2/contracts/interfaces/ILendingPool.sol";
 
 // import "forge-std/console.sol";
 
@@ -12,6 +13,8 @@ contract Vault is AccessControlUpgradeable {
     IERC20 public immutable token;
     IUniswapV2Router02 public uniswapRouter;
     AggregatorV3Interface internal dataFeed;
+    ILendingPool public aaveLendingPool;
+
     uint256 public maxSlippage; // Maximum allowed slippage in basis points (1% = 100, 0.5% = 50)
 
     uint256 public totalSupply; // Total Supply of shares
@@ -19,15 +22,29 @@ contract Vault is AccessControlUpgradeable {
 
     constructor(address _token, address _uniswapRouter, address _dataFeed) {
         require(_token != address(0), "Vault: Admin can not be zero address");
-        require(_uniswapRouter != address(0), "Vault: Router can not be zero address");
-        require(_dataFeed != address(0), "Vault: DataFeed can not be zero address");
+        require(
+            _uniswapRouter != address(0),
+            "Vault: Router can not be zero address"
+        );
+        require(
+            _dataFeed != address(0),
+            "Vault: DataFeed can not be zero address"
+        );
+        require(
+            _lendingPool != address(0),
+            "Vault: LendingPool can not be zero address"
+        );
 
         token = IERC20(_token);
         uniswapRouter = IUniswapV2Router02(_uniswapRouter);
         dataFeed = AggregatorV3Interface(_dataFeed);
+        aaveLendingPool = ILendingPool(_lendingPool);
     }
 
-    function initialize(address _admin, uint256 _initialSlippage) external initializer {
+    function initialize(
+        address _admin,
+        uint256 _initialSlippage
+    ) external initializer {
         __AccessControl_init();
         require(_admin != address(0), "Vault: Admin can not be zero address");
         // Grant the `DEFAULT_ADMIN_ROLE` to the _admin
@@ -84,7 +101,8 @@ contract Vault is AccessControlUpgradeable {
         require(_shares > 0, "Invalid share amount");
         require(balanceOf[msg.sender] >= _shares, "Insufficient shares");
 
-        uint256 amount = (_shares * token.balanceOf(address(this))) / totalSupply;
+        uint256 amount = (_shares * token.balanceOf(address(this))) /
+            totalSupply;
         _burn(msg.sender, _shares);
         token.transfer(msg.sender, amount);
     }
@@ -96,10 +114,13 @@ contract Vault is AccessControlUpgradeable {
      * @param path Array of token addresses representing the swap path.
      * @param deadline Unix timestamp after which the swap will expire.
      */
-    function swapTokens(uint256 amountIn, uint256 amountOutMin, address[] calldata path, address to, uint256 deadline)
-        external
-        onlyRole(DEFAULT_ADMIN_ROLE)
-    {
+    function swapTokens(
+        uint256 amountIn,
+        uint256 amountOutMin,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(path.length >= 2, "Invalid path");
         require(amountIn > 0, "Vault: Invalid amount");
         require(path[0] == address(token), "Vault: Invalid path");
@@ -108,14 +129,22 @@ contract Vault is AccessControlUpgradeable {
         IERC20(path[0]).approve(address(uniswapRouter), amountIn);
 
         // Perform the token swap on Uniswap
-        uniswapRouter.swapExactTokensForTokens(amountIn, amountOutMin, path, to, deadline);
+        uniswapRouter.swapExactTokensForTokens(
+            amountIn,
+            amountOutMin,
+            path,
+            to,
+            deadline
+        );
     }
 
     /**
      * @notice Allows the admin to set the maximum slippage percentage.
      * @param _slippage The maximum slippage percentage (e.g., 50 for 5%).
      */
-    function setMaxSlippage(uint256 _slippage) public onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setMaxSlippage(
+        uint256 _slippage
+    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
         require(_slippage <= 100, "Slippage too high");
         maxSlippage = _slippage;
     }
@@ -126,8 +155,13 @@ contract Vault is AccessControlUpgradeable {
      * @param currentPrice Current Chainlink price of the output token.
      * @return Minimum output amount after accounting for slippage.
      */
-    function calculateAmountOutMinChainLink(uint256 amountIn, uint256 currentPrice) public view returns (uint256) {
-        uint256 usedPrice = (currentPrice > 0) ? currentPrice : uint256(getChainlinkDataFeedLatestAnswer());
+    function calculateAmountOutMinChainLink(
+        uint256 amountIn,
+        uint256 currentPrice
+    ) public view returns (uint256) {
+        uint256 usedPrice = (currentPrice > 0)
+            ? currentPrice
+            : uint256(getChainlinkDataFeedLatestAnswer());
         uint256 amountOut = (amountIn * usedPrice) / 1e18; // Adjust for decimals
         uint256 slippageAmount = (amountOut * maxSlippage) / 10_000; // Slippage in basis points
         return amountOut - slippageAmount;
@@ -139,13 +173,15 @@ contract Vault is AccessControlUpgradeable {
      * @param path The swap path (e.g., [tokenA, tokenB]).
      * @return amountOutMin The minimum output amount after applying slippage.
      */
-    function calculateAmountOutMinUniswap(uint256 amountIn, address[] calldata path)
-        external
-        view
-        returns (uint256 amountOutMin)
-    {
+    function calculateAmountOutMinUniswap(
+        uint256 amountIn,
+        address[] calldata path
+    ) external view returns (uint256 amountOutMin) {
         // Get the expected output amount from Uniswap
-        uint256[] memory amountsOut = uniswapRouter.getAmountsOut(amountIn, path);
+        uint256[] memory amountsOut = uniswapRouter.getAmountsOut(
+            amountIn,
+            path
+        );
         uint256 amountOut = amountsOut[amountsOut.length - 1]; // The last element is the output amount
 
         // Apply slippage
@@ -164,7 +200,34 @@ contract Vault is AccessControlUpgradeable {
             int256 answer,
             ,
             ,
-        ) = dataFeed /*uint startedAt*/ /*uint timeStamp*/ /*uint80 answeredInRound*/ .latestRoundData();
+
+        ) = dataFeed /*uint startedAt*/ /*uint timeStamp*/ /*uint80 answeredInRound*/
+                .latestRoundData();
         return answer;
+    }
+
+    function lendToAave(uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(amount > 0, "Vault: Amount must be greater than zero");
+        token.approve(address(aaveLendingPool), amount);
+        aaveLendingPool.deposit(address(token), amount, address(this), 0);
+    }
+
+    function withdrawFromAave(
+        uint256 amount
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        aaveLendingPool.withdraw(address(token), amount, address(this));
+    }
+
+    function rebalance(
+        uint256 amountToAave,
+        uint256 amountToUniswap
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (amountToAave > 0) {
+            lendToAave(amountToAave);
+        }
+
+        if (amountToUniswap > 0) {
+            // Add liquidity to Uniswap or execute a trade
+        }
     }
 }
