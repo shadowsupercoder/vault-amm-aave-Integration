@@ -154,10 +154,13 @@ contract Vault is AccessControlUpgradeable {
      */
     function getChainlinkDataFeedLatestAnswer() public view returns (int256) {
         (
-            /* uint80 roundID */,
-            int answer,
-            /*uint startedAt*/,
-            /*uint timeStamp*/,
+            /* uint80 roundID */
+            ,
+            int256 answer,
+            /*uint startedAt*/
+            ,
+            /*uint timeStamp*/
+            ,
             /*uint80 answeredInRound*/
         ) = dataFeed.latestRoundData();
         return answer;
