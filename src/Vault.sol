@@ -289,15 +289,22 @@ contract Vault is AccessControlUpgradeable {
     }
 
     function isPriceValid(int256 price) internal view returns (bool) {
-    require(price > 0, "Vault: Invalid price");
-    (, , uint256 startedAt, uint256 updatedAt, ) = dataFeed.latestRoundData();
-    require(updatedAt >= startedAt, "Vault: Price feed stale");
-    return true;
-}
+        require(price > 0, "Vault: Invalid price");
+        (,, uint256 startedAt, uint256 updatedAt,) = dataFeed.latestRoundData();
+        require(updatedAt >= startedAt, "Vault: Price feed stale");
+        return true;
+    }
 
-function getValidatedPrice() public view returns (int256) {
-    int256 price = getChainlinkDataFeedLatestAnswer();
-    require(isPriceValid(price), "Vault: Invalid Chainlink price");
-    return price;
+    function getValidatedPrice() public view returns (int256) {
+        int256 price = getChainlinkDataFeedLatestAnswer();
+        require(isPriceValid(price), "Vault: Invalid Chainlink price");
+        return price;
+    }
+
+    function getUserShareValue(address user) public view returns (uint256) {
+    if (totalSupply == 0) return 0;
+    uint256 userShares = balanceOf[user];
+    uint256 vaultBalance = token.balanceOf(address(this));
+    return (userShares * vaultBalance) / totalSupply;
 }
 }
