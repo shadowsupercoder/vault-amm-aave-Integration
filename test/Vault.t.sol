@@ -18,7 +18,7 @@ contract VaultDepositWithdrawTest is Test {
     address owner = address(0x123);
     address user1 = address(0x456);
     address user2 = address(0x789);
-    
+
     // Uniswap V2Factory Address
     //https://docs.uniswap.org/contracts/v2/reference/smart-contracts/router-02
     address constant ROUTERV2 = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
