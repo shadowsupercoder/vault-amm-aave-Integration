@@ -264,4 +264,22 @@ contract Vault is AccessControlUpgradeable {
         IERC20(asset).approve(address(aaveLendingPool), amount);
         aaveLendingPool.repay(asset, amount, interestRateMode, address(this));
     }
+
+    function getHealthFactor() public view returns (uint256) {
+        (, , , uint256 healthFactor) = aaveLendingPool.getUserAccountData(
+            address(this)
+        );
+        return healthFactor;
+    }
+
+    function emergencyRepay(
+        address asset,
+        uint256 amount,
+        uint256 interestRateMode
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 healthFactor = getHealthFactor();
+        require(healthFactor < 1e18, "Vault: Health factor is safe");
+        IERC20(asset).approve(address(aaveLendingPool), amount);
+        aaveLendingPool.repay(asset, amount, interestRateMode, address(this));
+    }
 }
