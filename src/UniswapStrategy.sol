@@ -21,10 +21,7 @@ contract UniswapStrategy is IStrategy {
 
     constructor(address _uniswapRouter, address _dataFeed, address _pair, uint256 _initialSlippage) {
         require(_uniswapRouter != address(0), "Invalid Uniswap Router");
-        require(
-            _dataFeed != address(0),
-            "Vault: DataFeed address cannot be zero"
-        );
+        require(_dataFeed != address(0), "Vault: DataFeed address cannot be zero");
         require(_pair != address(0), "Invalid pair address");
 
         uniswapRouter = IUniswapV2Router02(_uniswapRouter);
@@ -40,85 +37,47 @@ contract UniswapStrategy is IStrategy {
         setMaxSlippage(_initialSlippage);
     }
 
-    function execute(bytes calldata params) external override {
-        (uint256 amount, address to, ) = abi
-            .decode(params, (uint256, address, address));
+    function execute(bytes calldata params) external {
+        (uint256 amount, address to,) = abi.decode(params, (uint256, address, address));
+                require(amount > 0, "Invalid amount");
 
         _validatePriceImpact(amount);
-        _swapTokens(
-            amount,
-            to,
-            block.timestamp + 1 hours,
-            swapPath
-        );
+        _swapTokens(amount, to, block.timestamp + 1 hours, swapPath);
     }
 
-    function _swapTokens(
-        uint256 amountIn,
-        address to,
-        uint256 deadline,
-        address[] memory path
-    ) private {
+    function _swapTokens(uint256 amountIn, address to, uint256 deadline, address[] memory path) private {
         require(amountIn > 0, "Invalid input amount");
         require(to != address(0), "Invalid recipient address");
         require(path.length >= 2, "Invalid swap path");
 
         // Calculate the minimum output amount based on slippage tolerance
-        uint256 expectedAmountOut = calculateAmountOutMin(
-            amountIn,
-            maxSlippage
-        );
+        uint256 expectedAmountOut = calculateAmountOutMin(amountIn, maxSlippage);
 
         // Approve tokens for Uniswap router
         _approveTokenIfNeeded(tokenIn, amountIn);
 
         // Perform the token swap
-        uint256[] memory amounts = _executeSwap(
-            amountIn,
-            expectedAmountOut,
-            path,
-            to,
-            deadline
-        );
+        uint256[] memory amounts = _executeSwap(amountIn, expectedAmountOut, path, to, deadline);
 
         // Validate the swap output
-        require(
-            amounts[amounts.length - 1] >= expectedAmountOut,
-            "Insufficient output amount"
-        );
+        require(amounts[amounts.length - 1] >= expectedAmountOut, "Insufficient output amount");
     }
 
     function _approveTokenIfNeeded(address token, uint256 amount) private {
-        uint256 currentAllowance = IERC20(token).allowance(
-            address(this),
-            address(uniswapRouter)
-        );
+        uint256 currentAllowance = IERC20(token).allowance(address(this), address(uniswapRouter));
         if (currentAllowance < amount) {
             IERC20(token).approve(address(uniswapRouter), amount);
         }
     }
 
-    function _executeSwap(
-        uint256 amountIn,
-        uint256 amountOutMin,
-        address[] memory path,
-        address to,
-        uint256 deadline
-    ) private returns (uint256[] memory) {
-        return
-            uniswapRouter.swapExactTokensForTokens(
-                amountIn,
-                amountOutMin,
-                path,
-                to,
-                deadline
-            );
+    function _executeSwap(uint256 amountIn, uint256 amountOutMin, address[] memory path, address to, uint256 deadline)
+        private
+        returns (uint256[] memory)
+    {
+        return uniswapRouter.swapExactTokensForTokens(amountIn, amountOutMin, path, to, deadline);
     }
 
-    function calculateAmountOutMin(
-        uint256 amountIn,
-        uint256 _maxSlippage
-    ) public view returns (uint256) {
+    function calculateAmountOutMin(uint256 amountIn, uint256 _maxSlippage) public view returns (uint256) {
         // Fetch current price from Chainlink
         uint256 price = uint256(getValidatedPrice());
         uint256 amountOut = (amountIn * price) / 1e18;
@@ -142,30 +101,22 @@ contract UniswapStrategy is IStrategy {
         (
             ,
             /* uint80 roundID */
-            int256 answer /*uint startedAt*/ /*uint timeStamp*/ /*uint80 answeredInRound*/,
+            int256 answer, /*uint startedAt*/ /*uint timeStamp*/ /*uint80 answeredInRound*/
             ,
             ,
-
         ) = dataFeed.latestRoundData();
         return answer;
     }
 
-    function _validatePriceImpact(
-        uint256 amountIn
-    ) internal view {
-        uint256[] memory amountsOut = uniswapRouter.getAmountsOut(
-            amountIn,
-            swapPath
-        );
-        uint256 priceImpact = ((amountsOut[0] -
-            amountsOut[amountsOut.length - 1]) * 10_000) / amountsOut[0];
+    function _validatePriceImpact(uint256 amountIn) internal view {
+        uint256[] memory amountsOut = uniswapRouter.getAmountsOut(amountIn, swapPath);
+        uint256 priceImpact = ((amountsOut[0] - amountsOut[amountsOut.length - 1]) * 10_000) / amountsOut[0];
         require(priceImpact <= maxSlippage, "Price impact too high");
     }
 
     function _isPriceValid(int256 price) internal view returns (bool) {
         require(price > 0, "Invalid price value");
-        (, , uint256 startedAt, uint256 updatedAt, ) = dataFeed
-            .latestRoundData();
+        (,, uint256 startedAt, uint256 updatedAt,) = dataFeed.latestRoundData();
         require(updatedAt >= startedAt, "Stale price data");
         require(block.timestamp - updatedAt <= 1 hours, "Price data outdated");
         return true;
@@ -191,10 +142,7 @@ contract UniswapStrategy is IStrategy {
      */
     function withdraw(bytes calldata params) external {
         // Decode the `params` to extract the withdrawal amount
-        (uint256 amount, , , ) = abi.decode(
-            params,
-            (uint256, uint256, address, address)
-        );
+        (uint256 amount,,,) = abi.decode(params, (uint256, uint256, address, address));
         require(amount > 0, "Invalid withdrawal amount");
 
         uint256 balance = IERC20(tokenIn).balanceOf(address(this));
