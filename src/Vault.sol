@@ -5,7 +5,7 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "uniswap/v2-periphery/interfaces/IUniswapV2Router02.sol";
 import "@chainlink/v0.8/interfaces/AggregatorV3Interface.sol";
-import "@aave/protocol-v2/contracts/interfaces/ILendingPool.sol";
+import "aave/interfaces/ILendingPool.sol";
 
 // import "forge-std/console.sol";
 
