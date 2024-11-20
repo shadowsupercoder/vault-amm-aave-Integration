@@ -282,4 +282,19 @@ contract Vault is AccessControlUpgradeable {
         IERC20(asset).approve(address(aaveLendingPool), amount);
         aaveLendingPool.repay(asset, amount, interestRateMode, address(this));
     }
+
+    function emergencyWithdrawAll() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 balance = token.balanceOf(address(this));
+        if (balance > 0) {
+            token.transfer(msg.sender, balance);
+        }
+        uint256 aaveBalance = aaveLendingPool.withdraw(
+            address(token),
+            type(uint256).max,
+            address(this)
+        );
+        if (aaveBalance > 0) {
+            token.transfer(msg.sender, aaveBalance);
+        }
+    }
 }
