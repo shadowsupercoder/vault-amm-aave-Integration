@@ -7,5 +7,7 @@ extra_output = ["storageLayout"]
 ffi = true
 ast = true
 remappings = [
-    "@chainlink/=lib/foundry-chainlink-toolkit/lib/chainlink-brownie-contracts/contracts/src/"
+    "@chainlink/=lib/foundry-chainlink-toolkit/lib/chainlink-brownie-contracts/contracts/src/",
+    "uniswap/v2-core/=lib/v2-core/contracts/",
+    "uniswap/v2-periphery/=lib/v2-periphery/contracts/"
 ]
