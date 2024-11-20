@@ -5,7 +5,7 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "uniswap/v2-periphery/interfaces/IUniswapV2Router02.sol";
 import "@chainlink/v0.8/interfaces/AggregatorV3Interface.sol";
-import "aave/interfaces/ILendingPool.sol";
+import "aave/interfaces/IPool.sol";
 
 // import "forge-std/console.sol";
 
@@ -13,14 +13,15 @@ contract Vault is AccessControlUpgradeable {
     IERC20 public immutable token;
     IUniswapV2Router02 public uniswapRouter;
     AggregatorV3Interface internal dataFeed;
-    ILendingPool public aaveLendingPool;
+    IPool public aaveLendingPool;
 
     uint256 public maxSlippage; // Maximum allowed slippage in basis points (1% = 100, 0.5% = 50)
 
     uint256 public totalSupply; // Total Supply of shares
     mapping(address => uint256) public balanceOf;
 
-    constructor(address _token, address _uniswapRouter, address _dataFeed) {
+    constructor(address _token, address _uniswapRouter, address _dataFeed, address _lendingPool
+) {
         require(_token != address(0), "Vault: Admin can not be zero address");
         require(_uniswapRouter != address(0), "Vault: Router can not be zero address");
         require(_dataFeed != address(0), "Vault: DataFeed can not be zero address");
@@ -29,7 +30,7 @@ contract Vault is AccessControlUpgradeable {
         token = IERC20(_token);
         uniswapRouter = IUniswapV2Router02(_uniswapRouter);
         dataFeed = AggregatorV3Interface(_dataFeed);
-        aaveLendingPool = ILendingPool(_lendingPool);
+        aaveLendingPool = IPool(_lendingPool);
     }
 
     function initialize(address _admin, uint256 _initialSlippage) external initializer {
@@ -174,9 +175,13 @@ contract Vault is AccessControlUpgradeable {
     }
 
     function lendToAave(uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _lendToAave(amount);
+    }
+
+    function _lendToAave(uint256 amount) private {
         require(amount > 0, "Vault: Amount must be greater than zero");
         token.approve(address(aaveLendingPool), amount);
-        aaveLendingPool.deposit(address(token), amount, address(this), 0);
+        aaveLendingPool.supply(address(token), amount, address(this), 0);
     }
 
     function withdrawFromAave(uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -185,7 +190,7 @@ contract Vault is AccessControlUpgradeable {
 
     function rebalance(uint256 amountToAave, uint256 amountToUniswap) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (amountToAave > 0) {
-            lendToAave(amountToAave);
+            _lendToAave(amountToAave);
         }
 
         if (amountToUniswap > 0) {

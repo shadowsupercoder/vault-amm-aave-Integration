@@ -18,6 +18,7 @@ contract VaultDepositWithdrawTest is Test {
     address owner = address(0x123);
     address user1 = address(0x456);
     address user2 = address(0x789);
+    address aavePoolAddress = 0x7BE2a3f926f3aB7dB872cB2caE3f6a9b4C06339E; // Aave Pool
 
     // Uniswap V2Factory Address
     //https://docs.uniswap.org/contracts/v2/reference/smart-contracts/router-02
@@ -35,7 +36,7 @@ contract VaultDepositWithdrawTest is Test {
 
         // Deploy the vault contract with the mock token
         vm.prank(owner);
-        vault = new Vault(address(token), address(router), address(mockPriceFeed));
+        vault = new Vault(address(token), address(router), address(mockPriceFeed), aavePoolAddress);
 
         // Distribute some tokens to users
         token.mint(user1, 1000 ether);
