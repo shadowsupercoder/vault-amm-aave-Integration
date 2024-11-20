@@ -6,3 +6,6 @@ build_info = true
 extra_output = ["storageLayout"]
 ffi = true
 ast = true
+remappings = [
+    "@chainlink/=lib/foundry-chainlink-toolkit/lib/chainlink-brownie-contracts/contracts/src/"
+]

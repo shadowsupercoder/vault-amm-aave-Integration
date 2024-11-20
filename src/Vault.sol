@@ -4,33 +4,33 @@ pragma solidity ^0.8.18;
 import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
-import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+import {AggregatorV3Interface} from "@chainlink/v0.8/interfaces/AggregatorV3Interface.sol";
 
 // import "forge-std/console.sol";
 
 contract Vault is AccessControlUpgradeable {
     IERC20 public immutable token;
     IUniswapV2Router02 public uniswapRouter;
-    AggregatorV3Interface public priceFeed;
+    AggregatorV3Interface internal dataFeed;
     uint256 public maxSlippage; // Maximum allowed slippage in basis points (1% = 100, 0.5% = 50)
 
     uint256 public totalSupply; // Total Supply of shares
     mapping(address => uint256) public balanceOf;
 
-    constructor(address _token, address _uniswapRouter, address _priceFeed) {
+    constructor(address _token, address _uniswapRouter, address _dataFeed) {
         require(_token != address(0), "Vault: Admin can not be zero address");
         require(
             _uniswapRouter != address(0),
             "Vault: Router can not be zero address"
         );
         require(
-            _priceFeed != address(0),
-            "Vault: PriceFeed can not be zero address"
+            _dataFeed != address(0),
+            "Vault: DataFeed can not be zero address"
         );
 
         token = IERC20(_token);
         uniswapRouter = IUniswapV2Router02(_uniswapRouter);
-        priceFeed = AggregatorV3Interface(_priceFeed);
+        dataFeed = AggregatorV3Interface(_dataFeed);
     }
 
     function initialize(
@@ -158,9 +158,14 @@ contract Vault is AccessControlUpgradeable {
      * @notice Fetches the latest price from the Chainlink price feed.
      * @return The latest price with 18 decimals.
      */
-    function getLatestPrice() public view returns (uint256) {
-        (, int256 price, , , ) = priceFeed.latestRoundData();
-        require(price > 0, "Invalid price");
-        return uint256(price);
+    function getChainlinkDataFeedLatestAnswer() public view returns (int256) {
+        (
+            /* uint80 roundID */,
+            int256 answer,
+            /*uint startedAt*/,
+            /*uint timeStamp*/,
+            /*uint80 answeredInRound*/
+        ) = dataFeed.latestRoundData();
+        return answer;
     }
 }
