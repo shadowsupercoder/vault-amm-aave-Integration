@@ -12,7 +12,6 @@ import "./libs/DiamondStorage.sol";
 
 contract Vault is AccessControlUpgradeable {
     IERC20 public immutable token;
-    IUniswapV2Router02 public immutable uniswapRouter;
 
     uint256 public totalSupply; // Total Supply of shares
     mapping(address => uint256) public balanceOf;
@@ -36,52 +35,42 @@ contract Vault is AccessControlUpgradeable {
     }
 
     modifier onlyStrategy(address strategy) {
-        DiamondStorage.StrategyData storage ds = DiamondStorage
-            .strategyStorage();
+        DiamondStorage.StrategyData storage ds = DiamondStorage.strategyStorage();
         require(ds.strategies[strategy], "Strategy not found");
         _;
     }
 
     modifier hasCurrentStrategy() {
-        DiamondStorage.StrategyData storage ds = DiamondStorage
-            .strategyStorage();
+        DiamondStorage.StrategyData storage ds = DiamondStorage.strategyStorage();
         require(ds.currentStrategy != address(0), "Vault: No strategy set");
         _;
     }
 
     // Add a strategy
-    function addStrategy(
-        address strategy,
-        uint256 allocation
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function addStrategy(address strategy, uint256 allocation) external onlyRole(DEFAULT_ADMIN_ROLE) {
         _addStrategy(strategy, allocation);
     }
 
-    function switchStrategy(
-        address newStrategy
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) onlyStrategy(newStrategy) {
+    function switchStrategy(address newStrategy) external onlyRole(DEFAULT_ADMIN_ROLE) onlyStrategy(newStrategy) {
         _switchStrategy(newStrategy);
     }
 
-    function updateAllocations(
-        address[] calldata strategies,
-        uint256[] calldata allocations
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function updateAllocations(address[] calldata strategies, uint256[] calldata allocations)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
         require(strategies.length == allocations.length, "Mismatched inputs");
         require(strategies.length > 0, "No strategies provided");
         _updateAllocations(strategies, allocations);
     }
 
-    function removeStrategy(
-        address strategy
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) onlyStrategy(strategy) {
+    function removeStrategy(address strategy) external onlyRole(DEFAULT_ADMIN_ROLE) onlyStrategy(strategy) {
         _removeStrategy(strategy);
     }
 
     function deposit(uint256 amount) external {
         require(amount > 0, "Vault: Invalid deposit amount");
-        DiamondStorage.StrategyData storage ds = DiamondStorage
-            .strategyStorage();
+        DiamondStorage.StrategyData storage ds = DiamondStorage.strategyStorage();
 
         // Transfer tokens to the vault
         token.transferFrom(msg.sender, address(this), amount);
@@ -106,8 +95,7 @@ contract Vault is AccessControlUpgradeable {
         uint256 amount = _calculateWithdrawAmount(shares);
 
         // Withdraw funds from the strategy
-        DiamondStorage.StrategyData storage ds = DiamondStorage
-            .strategyStorage();
+        DiamondStorage.StrategyData storage ds = DiamondStorage.strategyStorage();
         _executeStrategyWithdraw(amount, msg.sender, ds.currentStrategy);
 
         // Transfer tokens and burn shares
@@ -122,8 +110,7 @@ contract Vault is AccessControlUpgradeable {
     }
 
     function getCurrentStrategy() external view returns (address) {
-        DiamondStorage.StrategyData storage ds = DiamondStorage
-            .strategyStorage();
+        DiamondStorage.StrategyData storage ds = DiamondStorage.strategyStorage();
         return ds.currentStrategy;
     }
 
@@ -134,32 +121,19 @@ contract Vault is AccessControlUpgradeable {
         return (userShares * vaultBalance) / totalSupply;
     }
 
-    function _executeStrategy(
-        uint256 amount,
-        address user,
-        address strategy
-    ) internal {
+    function _executeStrategy(uint256 amount, address user, address strategy) internal {
         bytes memory params = abi.encode(amount, user);
         token.approve(strategy, amount);
         IStrategy(strategy).execute(params);
     }
 
-    function _executeStrategyWithdraw(
-        uint256 amount,
-        address user,
-        address strategy
-    ) internal {
-        bytes memory params = abi.encode(
-            amount,
-            user,
-            address(this),
-            address(this)
-        );
+    function _executeStrategyWithdraw(uint256 amount, address user, address strategy) internal {
+        bytes memory params = abi.encode(amount, user, address(this), address(this));
         IStrategy(strategy).withdraw(params);
     }
+
     function _removeStrategy(address strategy) internal {
-        DiamondStorage.StrategyData storage ds = DiamondStorage
-            .strategyStorage();
+        DiamondStorage.StrategyData storage ds = DiamondStorage.strategyStorage();
         ds.strategies[strategy] = false;
 
         uint256 length = ds.strategyList.length;
@@ -174,9 +148,9 @@ contract Vault is AccessControlUpgradeable {
         ds.allocations[strategy] = 0;
         _validateTotalAllocation();
     }
+
     function _switchStrategy(address newStrategy) internal {
-        DiamondStorage.StrategyData storage ds = DiamondStorage
-            .strategyStorage();
+        DiamondStorage.StrategyData storage ds = DiamondStorage.strategyStorage();
         address oldStrategy = ds.currentStrategy;
 
         if (oldStrategy != address(0)) {
@@ -194,8 +168,7 @@ contract Vault is AccessControlUpgradeable {
         require(strategy != address(0), "Invalid strategy address");
         require(allocation > 0, "Allocation must be greater than zero");
 
-        DiamondStorage.StrategyData storage ds = DiamondStorage
-            .strategyStorage();
+        DiamondStorage.StrategyData storage ds = DiamondStorage.strategyStorage();
         require(!ds.strategies[strategy], "Strategy already exists");
 
         ds.strategies[strategy] = true;
@@ -205,12 +178,8 @@ contract Vault is AccessControlUpgradeable {
         _validateTotalAllocation();
     }
 
-    function _updateAllocations(
-        address[] calldata strategies,
-        uint256[] calldata allocations
-    ) internal {
-        DiamondStorage.StrategyData storage ds = DiamondStorage
-            .strategyStorage();
+    function _updateAllocations(address[] calldata strategies, uint256[] calldata allocations) internal {
+        DiamondStorage.StrategyData storage ds = DiamondStorage.strategyStorage();
 
         uint256 totalAllocation = 0;
         for (uint256 i = 0; i < strategies.length; i++) {
@@ -223,8 +192,7 @@ contract Vault is AccessControlUpgradeable {
     }
 
     function _validateTotalAllocation() internal view {
-        DiamondStorage.StrategyData storage ds = DiamondStorage
-            .strategyStorage();
+        DiamondStorage.StrategyData storage ds = DiamondStorage.strategyStorage();
         uint256 totalAllocation = 0;
 
         for (uint256 i = 0; i < ds.strategyList.length; i++) {
@@ -236,29 +204,23 @@ contract Vault is AccessControlUpgradeable {
 
     function _calculateShares(uint256 amount) internal view returns (uint256) {
         uint256 vaultBalance = _getVaultBalance();
-        return
-            (totalSupply == 0) ? amount : (amount * totalSupply) / vaultBalance;
+        return (totalSupply == 0) ? amount : (amount * totalSupply) / vaultBalance;
     }
 
-    function _calculateWithdrawAmount(
-        uint256 shares
-    ) internal view returns (uint256) {
+    function _calculateWithdrawAmount(uint256 shares) internal view returns (uint256) {
         uint256 vaultBalance = _getVaultBalance();
         return (shares * vaultBalance) / totalSupply;
     }
 
     function _getVaultBalance() internal view returns (uint256) {
-        DiamondStorage.StrategyData storage ds = DiamondStorage
-            .strategyStorage();
-        return
-            (ds.currentStrategy != address(0))
-                ? IStrategy(ds.currentStrategy).getBalance()
-                : token.balanceOf(address(this));
+        DiamondStorage.StrategyData storage ds = DiamondStorage.strategyStorage();
+        return (ds.currentStrategy != address(0))
+            ? IStrategy(ds.currentStrategy).getBalance()
+            : token.balanceOf(address(this));
     }
 
     function _rebalance() internal {
-        DiamondStorage.StrategyData storage ds = DiamondStorage
-            .strategyStorage();
+        DiamondStorage.StrategyData storage ds = DiamondStorage.strategyStorage();
         address[] memory strategies = ds.strategyList;
 
         if (ds.currentStrategy != address(0)) {
@@ -268,8 +230,7 @@ contract Vault is AccessControlUpgradeable {
 
         uint256 remainingBalance = token.balanceOf(address(this));
         for (uint256 i = 0; i < strategies.length; i++) {
-            uint256 allocation = (remainingBalance *
-                ds.allocations[strategies[i]]) / 10_000;
+            uint256 allocation = (remainingBalance * ds.allocations[strategies[i]]) / 10_000;
             if (allocation > 0) {
                 _executeStrategy(allocation, address(this), strategies[i]);
             }
