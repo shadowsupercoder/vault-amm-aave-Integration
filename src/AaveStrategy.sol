@@ -17,10 +17,7 @@ contract AaveStrategy is IStrategy {
     }
 
     function execute(bytes calldata params) external {
-        (uint256 amount, , address from) = abi.decode(
-            params,
-            (uint256, address, address)
-        );
+        (uint256 amount,, address from) = abi.decode(params, (uint256, address, address));
         require(amount > 0, "Invalid amount");
 
         // Transfer tokens from Vault to the strategy
@@ -30,7 +27,7 @@ contract AaveStrategy is IStrategy {
     }
 
     function withdraw(bytes calldata params) external {
-        (uint256 amount, , ) = abi.decode(params, (uint256, address, address));
+        (uint256 amount,,) = abi.decode(params, (uint256, address, address));
 
         require(amount > 0, "Invalid amount");
 
@@ -39,9 +36,7 @@ contract AaveStrategy is IStrategy {
     }
 
     function getBalance() external view returns (uint256) {
-        (uint256 totalCollateralBase, , , , , ) = aavePool.getUserAccountData(
-            address(this)
-        );
+        (uint256 totalCollateralBase,,,,,) = aavePool.getUserAccountData(address(this));
         return totalCollateralBase;
     }
 
@@ -51,7 +46,6 @@ contract AaveStrategy is IStrategy {
      *      It requires the token amount to be greater than zero and approves the Aave pool to use the tokens.
      * @param amount The amount of tokens to supply.
      */
-
     function _lendToAave(uint256 amount) private {
         require(amount > 0, "Vault: Amount must be greater than zero");
         token.approve(address(aavePool), amount);
@@ -65,11 +59,7 @@ contract AaveStrategy is IStrategy {
      * @param amount The amount of tokens to borrow.
      * @param interestRateMode The interest rate mode: 1 for stable, 2 for variable.
      */
-    function borrowFromAave(
-        address asset,
-        uint256 amount,
-        uint256 interestRateMode
-    ) external {
+    function borrowFromAave(address asset, uint256 amount, uint256 interestRateMode) external {
         require(amount > 0, "Vault: Amount must be greater than zero");
         aavePool.borrow(asset, amount, interestRateMode, 0, address(this));
     }
@@ -82,11 +72,7 @@ contract AaveStrategy is IStrategy {
      * @param interestRateMode The interest rate mode: 1 for stable, 2 for variable.
      */
 
-    function repayToAave(
-        address asset,
-        uint256 amount,
-        uint256 interestRateMode
-    ) public {
+    function repayToAave(address asset, uint256 amount, uint256 interestRateMode) public {
         require(amount > 0, "Vault: Amount must be greater than zero");
         IERC20(asset).approve(address(aavePool), amount);
         aavePool.repay(asset, amount, interestRateMode, address(this));
@@ -97,9 +83,7 @@ contract AaveStrategy is IStrategy {
      */
 
     function getHealthFactor() public view returns (uint256) {
-        (, , , , , uint256 healthFactor) = aavePool.getUserAccountData(
-            address(this)
-        );
+        (,,,,, uint256 healthFactor) = aavePool.getUserAccountData(address(this));
         return healthFactor;
     }
     /**
@@ -111,11 +95,7 @@ contract AaveStrategy is IStrategy {
      * @param interestRateMode The interest rate mode: 1 for stable, 2 for variable.
      */
 
-    function emergencyRepay(
-        address asset,
-        uint256 amount,
-        uint256 interestRateMode
-    ) external {
+    function emergencyRepay(address asset, uint256 amount, uint256 interestRateMode) external {
         uint256 healthFactor = getHealthFactor();
         require(healthFactor < 1e18, "Vault: Health factor is safe");
 

@@ -19,6 +19,11 @@ contract Vault is AccessControlUpgradeable {
 
     mapping(address => uint256) public balanceOf;
 
+    event StrategySwitched(address oldStrategy, address newStrategy);
+    event Deposited(address indexed user, uint256 amount, uint256 shares);
+    event Withdrawn(address indexed user, uint256 shares, uint256 amount);
+    event Rebalanced(address[] strategies, uint256[] allocations);
+
     constructor(address _token) {
         require(_token != address(0), "Vault: Token address cannot be zero");
         token = IERC20(_token);
@@ -31,7 +36,9 @@ contract Vault is AccessControlUpgradeable {
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
     }
 
-    function setStrategy(address strategy) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setStrategy(
+        address strategy
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         // strategy can be empty
         currentStrategy = IStrategy(strategy);
     }
@@ -54,7 +61,7 @@ contract Vault is AccessControlUpgradeable {
         require(amount > 0, "Vault: Invalid deposit amount");
 
         token.transferFrom(msg.sender, address(this), amount);
-        
+
         if (address(currentStrategy) != address(0)) {
             // Forward funds to the strategy
             token.approve(address(currentStrategy), amount);
@@ -64,7 +71,9 @@ contract Vault is AccessControlUpgradeable {
 
         // Calculate shares based on the current vault or strategy balance
         uint256 vaultBalance = _getVaultBalance();
-        uint256 shares = (totalSupply == 0) ? amount : (amount * totalSupply) / vaultBalance;
+        uint256 shares = (totalSupply == 0)
+            ? amount
+            : (amount * totalSupply) / vaultBalance;
         _mint(msg.sender, shares);
     }
 
@@ -112,5 +121,63 @@ contract Vault is AccessControlUpgradeable {
         uint256 userShares = balanceOf[user];
         uint256 vaultBalance = _getVaultBalance();
         return (userShares * vaultBalance) / totalSupply;
+    }
+
+    /**
+     * @notice Rebalance funds between strategies or hold in the vault.
+     * @param strategies The list of strategies to allocate funds to.
+     * @param allocations The list of allocations (percentages in basis points) for each strategy.
+     *        e.g., [5000, 3000, 2000] represents 50%, 30%, 20%.
+     */
+    function rebalance(
+        address[] calldata strategies,
+        uint256[] calldata allocations
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(strategies.length == allocations.length, "Mismatched inputs");
+        require(strategies.length > 0, "No strategies provided");
+
+        uint256 totalVaultBalance = _getVaultBalance();
+        require(totalVaultBalance > 0, "No funds to rebalance");
+
+        uint256 totalAllocation = 0;
+
+        // Calculate total allocation to ensure it sums to 100% (10,000 basis points)
+        for (uint256 i = 0; i < allocations.length; i++) {
+            totalAllocation += allocations[i];
+        }
+        require(totalAllocation == 10_000, "Allocations must sum to 100%");
+
+        // Withdraw all funds from the current active strategy, if any
+        if (address(currentStrategy) != address(0)) {
+            uint256 withdrawn = currentStrategy.withdrawAll();
+            require(withdrawn > 0, "Failed to withdraw from active strategy");
+        }
+
+        // Allocate funds to new strategies
+        uint256 remainingBalance = token.balanceOf(address(this));
+        for (uint256 i = 0; i < strategies.length; i++) {
+            address strategy = strategies[i];
+            uint256 allocation = (remainingBalance * allocations[i]) / 10_000;
+
+            if (allocation > 0) {
+                // Approve and execute strategy allocation
+                token.approve(strategy, allocation);
+                bytes memory params = abi.encode(
+                    allocation,
+                    address(this),
+                    address(this)
+                );
+                IStrategy(strategy).execute(params);
+            }
+        }
+
+        // Update active strategy if only one strategy is used
+        if (strategies.length == 1) {
+            currentStrategy = IStrategy(strategies[0]);
+        } else {
+            currentStrategy = IStrategy(address(0)); // No single active strategy
+        }
+
+        emit Rebalanced(strategies, allocations);
     }
 }

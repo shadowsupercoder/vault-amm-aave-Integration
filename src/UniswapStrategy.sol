@@ -19,6 +19,8 @@ contract UniswapStrategy is IStrategy {
 
     uint256 public maxSlippage; // Maximum allowed slippage in basis points (1% = 100, 0.5% = 50)
 
+    event TokensSwapped(address tokenIn, address tokenOut, uint256 amountIn, uint256 amountOut);
+
     constructor(address _uniswapRouter, address _dataFeed, address _pair, uint256 _initialSlippage) {
         require(_uniswapRouter != address(0), "Invalid Uniswap Router");
         require(_dataFeed != address(0), "Vault: DataFeed address cannot be zero");
@@ -39,7 +41,7 @@ contract UniswapStrategy is IStrategy {
 
     function execute(bytes calldata params) external {
         (uint256 amount, address to,) = abi.decode(params, (uint256, address, address));
-                require(amount > 0, "Invalid amount");
+        require(amount > 0, "Invalid amount");
 
         _validatePriceImpact(amount);
         _swapTokens(amount, to, block.timestamp + 1 hours, swapPath);
