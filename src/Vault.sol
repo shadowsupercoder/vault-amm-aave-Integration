@@ -24,6 +24,7 @@ contract Vault is AccessControlUpgradeable {
     event Deposited(address indexed user, uint256 amount, uint256 shares);
     event Withdrawn(address indexed user, uint256 shares, uint256 amount);
     event Rebalanced(address[] strategies);
+    event AllocationsUpdated(address[] strategies);
 
     constructor(address _token) {
         require(_token != address(0), "Vault: Token address cannot be zero");
@@ -124,6 +125,34 @@ contract Vault is AccessControlUpgradeable {
         ds.currentStrategy = newStrategy;
 
         emit StrategySwitched(oldStrategy, newStrategy);
+    }
+
+    function updateAllocations(
+        address[] calldata strategies,
+        uint256[] calldata allocations
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(strategies.length == allocations.length, "Mismatched inputs");
+        require(strategies.length > 0, "No strategies provided");
+
+        DiamondStorage.StrategyData storage ds = DiamondStorage
+            .strategyStorage();
+
+        uint256 totalAllocation = 0;
+
+        // Update allocations for each strategy
+        for (uint256 i = 0; i < strategies.length; i++) {
+            address strategy = strategies[i];
+            require(ds.strategies[strategy], "Strategy not found"); // Ensure the strategy exists
+            require(allocations[i] > 0, "Invalid allocation");
+
+            ds.allocations[strategy] = allocations[i];
+            totalAllocation += allocations[i];
+        }
+
+        // Validate that total allocations sum to 100%
+        require(totalAllocation == 10_000, "Allocations must sum to 100%");
+
+        emit AllocationsUpdated(strategies);
     }
 
     function _mint(address _to, uint256 _shares) private {

@@ -8,7 +8,7 @@ library DiamondStorage {
         address currentStrategy;
         mapping(address => bool) strategies;
         mapping(address => uint256) allocations; // Strategy-specific allocations
-        address[] strategyList;                  // List of all strategies
+        address[] strategyList; // List of all strategies
     }
 
     function strategyStorage() internal pure returns (StrategyData storage ds) {
