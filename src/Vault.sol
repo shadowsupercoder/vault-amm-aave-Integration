@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "uniswap/v2-periphery/interfaces/IUniswapV2Router02.sol";
@@ -10,8 +11,8 @@ import "./libs/DiamondStorage.sol";
 
 // import "forge-std/console.sol";
 
-contract Vault is AccessControlUpgradeable {
-    IERC20 public immutable token;
+contract Vault is AccessControlUpgradeable, UUPSUpgradeable {
+    IERC20 public token;
 
     uint256 public totalSupply; // Total Supply of shares
     mapping(address => uint256) public balanceOf;
@@ -22,15 +23,13 @@ contract Vault is AccessControlUpgradeable {
     event Rebalanced(address[] strategies);
     event AllocationsUpdated(address[] strategies);
 
-    constructor(address _token) {
+    // Initialize function
+    function initialize(address _token, address _admin) external initializer {
+        __AccessControl_init();
+        __UUPSUpgradeable_init();
+        require(_admin != address(0), "Vault: Admin cannot be zero address");
         require(_token != address(0), "Vault: Token address cannot be zero");
         token = IERC20(_token);
-    }
-
-    // Initialize function
-    function initialize(address _admin) external initializer {
-        __AccessControl_init();
-        require(_admin != address(0), "Vault: Admin cannot be zero address");
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
     }
 
@@ -120,6 +119,8 @@ contract Vault is AccessControlUpgradeable {
         uint256 vaultBalance = _getVaultBalance();
         return (userShares * vaultBalance) / totalSupply;
     }
+
+    function _authorizeUpgrade(address newImplementation) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
 
     function _executeStrategy(uint256 amount, address user, address strategy) internal {
         bytes memory params = abi.encode(amount, user);
