@@ -6,6 +6,7 @@ import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol"
 import "uniswap/v2-periphery/interfaces/IUniswapV2Router02.sol";
 import "aave/interfaces/IPool.sol";
 import "./interfaces/IStrategy.sol";
+import "./DiamondStorage.sol";
 
 // import "forge-std/console.sol";
 
@@ -22,7 +23,7 @@ contract Vault is AccessControlUpgradeable {
     event StrategySwitched(address oldStrategy, address newStrategy);
     event Deposited(address indexed user, uint256 amount, uint256 shares);
     event Withdrawn(address indexed user, uint256 shares, uint256 amount);
-    event Rebalanced(address[] strategies, uint256[] allocations);
+    event Rebalanced(address[] strategies);
 
     constructor(address _token) {
         require(_token != address(0), "Vault: Token address cannot be zero");
@@ -36,11 +37,93 @@ contract Vault is AccessControlUpgradeable {
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
     }
 
-    function setStrategy(
+    function addStrategy(
+        address strategy,
+        uint256 allocation
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(strategy != address(0), "Invalid strategy address");
+        require(allocation > 0, "Allocation must be greater than zero");
+
+        DiamondStorage.StrategyData storage ds = DiamondStorage
+            .strategyStorage();
+
+        // Ensure the strategy is not already added
+        require(!ds.strategies[strategy], "Strategy already exists");
+
+        // Add the strategy
+        ds.strategies[strategy] = true;
+        ds.strategyList.push(strategy);
+
+        // Set the allocation for the strategy
+        ds.allocations[strategy] = allocation;
+
+        // Validate total allocations
+        uint256 totalAllocation = 0;
+        for (uint256 i = 0; i < ds.strategyList.length; i++) {
+            totalAllocation += ds.allocations[ds.strategyList[i]];
+        }
+        require(totalAllocation <= 10_000, "Total allocations exceed 100%");
+    }
+
+    function removeStrategy(
         address strategy
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        // strategy can be empty
-        currentStrategy = IStrategy(strategy);
+        require(strategy != address(0), "Invalid strategy address");
+
+        DiamondStorage.StrategyData storage ds = DiamondStorage
+            .strategyStorage();
+        require(ds.strategies[strategy], "Strategy does not exist");
+
+        // Remove from the mapping
+        ds.strategies[strategy] = false;
+
+        // Remove from the array
+        uint256 length = ds.strategyList.length;
+        for (uint256 i = 0; i < length; i++) {
+            if (ds.strategyList[i] == strategy) {
+                ds.strategyList[i] = ds.strategyList[length - 1];
+                ds.strategyList.pop();
+                break;
+            }
+        }
+
+        // Reset the allocation
+        ds.allocations[strategy] = 0;
+
+        // Validate total allocations
+        uint256 totalAllocation = 0;
+        for (uint256 i = 0; i < ds.strategyList.length; i++) {
+            totalAllocation += ds.allocations[ds.strategyList[i]];
+        }
+        require(totalAllocation <= 10_000, "Total allocations exceed 100%");
+    }
+
+    function switchStrategy(
+        address newStrategy
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(newStrategy != address(0), "Invalid strategy address");
+
+        DiamondStorage.StrategyData storage ds = DiamondStorage
+            .strategyStorage();
+
+        require(ds.strategies[newStrategy], "Strategy not allowed");
+        address oldStrategy = ds.currentStrategy;
+
+        if (oldStrategy != address(0)) {
+            uint256 balance = IStrategy(oldStrategy).getBalance();
+            if (balance > 0) {
+                bytes memory params = abi.encode(
+                    balance,
+                    address(this),
+                    msg.sender
+                );
+                IStrategy(oldStrategy).withdraw(params);
+            }
+        }
+
+        ds.currentStrategy = newStrategy;
+
+        emit StrategySwitched(oldStrategy, newStrategy);
     }
 
     function _mint(address _to, uint256 _shares) private {
@@ -53,6 +136,12 @@ contract Vault is AccessControlUpgradeable {
         balanceOf[_from] -= _shares;
     }
 
+    function getCurrentStrategy() external view returns (address) {
+        DiamondStorage.StrategyData storage ds = DiamondStorage
+            .strategyStorage();
+        return ds.currentStrategy;
+    }
+
     /**
      * @notice Deposit tokens to receive vault shares.
      * @param amount The amount of tokens to deposit.
@@ -60,21 +149,31 @@ contract Vault is AccessControlUpgradeable {
     function deposit(uint256 amount) external {
         require(amount > 0, "Vault: Invalid deposit amount");
 
+        DiamondStorage.StrategyData storage ds = DiamondStorage
+            .strategyStorage();
+
+        require(ds.currentStrategy != address(0), "Vault: No strategy set");
+
+        // Transfer tokens to the vault
         token.transferFrom(msg.sender, address(this), amount);
 
-        if (address(currentStrategy) != address(0)) {
-            // Forward funds to the strategy
-            token.approve(address(currentStrategy), amount);
+        // Forward funds to the current strategy if one exists
+        if (ds.currentStrategy != address(0)) {
+            token.approve(ds.currentStrategy, amount);
+
+            // Assuming the strategy requires specific parameters encoded for execution
             bytes memory params = abi.encode(amount, msg.sender, address(this));
-            currentStrategy.execute(params);
+            IStrategy(ds.currentStrategy).execute(params); // Ensure `execute` is implemented in the strategy
         }
 
         // Calculate shares based on the current vault or strategy balance
         uint256 vaultBalance = _getVaultBalance();
+        require(vaultBalance > 0, "Vault: Balance must be greater than zero");
+
         uint256 shares = (totalSupply == 0)
             ? amount
             : (amount * totalSupply) / vaultBalance;
-        _mint(msg.sender, shares);
+        _mint(msg.sender, shares); // Mint shares proportional to deposit
     }
 
     /**
@@ -85,18 +184,26 @@ contract Vault is AccessControlUpgradeable {
         require(_shares > 0, "Vault: Invalid share amount");
         require(balanceOf[msg.sender] >= _shares, "Vault: Insufficient shares");
 
+        DiamondStorage.StrategyData storage ds = DiamondStorage
+            .strategyStorage();
+        require(ds.currentStrategy != address(0), "Vault: No strategy set");
+
         // Calculate the user's proportional amount of the vault's balance
         uint256 vaultBalance = _getVaultBalance();
+        require(vaultBalance > 0, "Vault: Insufficient vault balance");
+
         uint256 amount = (_shares * vaultBalance) / totalSupply;
 
-        if (address(currentStrategy) != address(0)) {
-            // Withdraw from strategy
+        // Withdraw from the current strategy if applicable
+        if (ds.currentStrategy != address(0)) {
             bytes memory params = abi.encode(amount, msg.sender);
-            currentStrategy.withdraw(params);
+            IStrategy(ds.currentStrategy).withdraw(params); // Strategy handles encoded parameters
         }
 
         // Transfer tokens to the user
         token.transfer(msg.sender, amount);
+
+        // Burn the user's shares
         _burn(msg.sender, _shares);
     }
 
@@ -123,45 +230,41 @@ contract Vault is AccessControlUpgradeable {
         return (userShares * vaultBalance) / totalSupply;
     }
 
-    /**
-     * @notice Rebalance funds between strategies or hold in the vault.
-     * @param strategies The list of strategies to allocate funds to.
-     * @param allocations The list of allocations (percentages in basis points) for each strategy.
-     *        e.g., [5000, 3000, 2000] represents 50%, 30%, 20%.
-     */
-    function rebalance(
-        address[] calldata strategies,
-        uint256[] calldata allocations
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(strategies.length == allocations.length, "Mismatched inputs");
-        require(strategies.length > 0, "No strategies provided");
-
+    function rebalance() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        DiamondStorage.StrategyData storage ds = DiamondStorage
+            .strategyStorage();
         uint256 totalVaultBalance = _getVaultBalance();
         require(totalVaultBalance > 0, "No funds to rebalance");
 
+        address[] memory strategies = ds.strategyList;
+        require(strategies.length > 0, "No strategies available");
+
         uint256 totalAllocation = 0;
 
-        // Calculate total allocation to ensure it sums to 100% (10,000 basis points)
-        for (uint256 i = 0; i < allocations.length; i++) {
-            totalAllocation += allocations[i];
+        // Validate total allocation
+        for (uint256 i = 0; i < strategies.length; i++) {
+            totalAllocation += ds.allocations[strategies[i]];
         }
         require(totalAllocation == 10_000, "Allocations must sum to 100%");
 
         // Withdraw all funds from the current active strategy, if any
-        if (address(currentStrategy) != address(0)) {
-            uint256 withdrawn = currentStrategy.withdrawAll();
+        if (ds.currentStrategy != address(0)) {
+            uint256 withdrawn = IStrategy(ds.currentStrategy).withdrawAll();
             require(withdrawn > 0, "Failed to withdraw from active strategy");
         }
 
-        // Allocate funds to new strategies
+        // Allocate funds to each stored strategy
         uint256 remainingBalance = token.balanceOf(address(this));
         for (uint256 i = 0; i < strategies.length; i++) {
             address strategy = strategies[i];
-            uint256 allocation = (remainingBalance * allocations[i]) / 10_000;
+            require(ds.strategies[strategy], "Invalid strategy address");
 
+            uint256 allocation = (remainingBalance * ds.allocations[strategy]) /
+                10_000;
             if (allocation > 0) {
-                // Approve and execute strategy allocation
                 token.approve(strategy, allocation);
+
+                // Execute the allocation in the strategy
                 bytes memory params = abi.encode(
                     allocation,
                     address(this),
@@ -171,13 +274,13 @@ contract Vault is AccessControlUpgradeable {
             }
         }
 
-        // Update active strategy if only one strategy is used
+        // Update the current strategy if only one strategy is used
         if (strategies.length == 1) {
-            currentStrategy = IStrategy(strategies[0]);
+            ds.currentStrategy = strategies[0];
         } else {
-            currentStrategy = IStrategy(address(0)); // No single active strategy
+            ds.currentStrategy = address(0); // No single active strategy
         }
 
-        emit Rebalanced(strategies, allocations);
+        emit Rebalanced(strategies);
     }
 }
