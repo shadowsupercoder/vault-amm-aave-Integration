@@ -11,7 +11,7 @@ import "./libs/DiamondStorage.sol";
 
 // import "forge-std/console.sol";
 
-contract Vault is AccessControlUpgradeable, UUPSUpgradeable {
+contract Vault is UUPSUpgradeable, AccessControlUpgradeable {
     IERC20 public token;
 
     uint256 public totalSupply; // Total Supply of shares
@@ -22,6 +22,7 @@ contract Vault is AccessControlUpgradeable, UUPSUpgradeable {
     event Withdrawn(address indexed user, uint256 shares, uint256 amount);
     event Rebalanced(address[] strategies);
     event AllocationsUpdated(address[] strategies);
+    event Initialized(address token, address admin);
 
     // Initialize function
     function initialize(address _token, address _admin) external initializer {
@@ -31,6 +32,7 @@ contract Vault is AccessControlUpgradeable, UUPSUpgradeable {
         require(_token != address(0), "Vault: Token address cannot be zero");
         token = IERC20(_token);
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
+        emit Initialized(_token, _admin);
     }
 
     modifier onlyStrategy(address strategy) {
@@ -122,6 +124,7 @@ contract Vault is AccessControlUpgradeable, UUPSUpgradeable {
 
     function _authorizeUpgrade(address newImplementation) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
 
+    
     function _executeStrategy(uint256 amount, address user, address strategy) internal {
         bytes memory params = abi.encode(amount, user);
         token.approve(strategy, amount);
